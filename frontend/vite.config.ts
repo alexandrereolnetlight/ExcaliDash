@@ -47,6 +47,11 @@ export default defineConfig(({ command }) => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, ""),
         },
+        // OAuth discovery for the MCP server, forwarded unchanged (as nginx does).
+        "/.well-known/oauth-": {
+          target: devBackendTarget,
+          changeOrigin: true,
+        },
         "/socket.io": {
           target: devBackendTarget,
           changeOrigin: true,

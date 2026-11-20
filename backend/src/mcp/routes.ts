@@ -2,15 +2,18 @@
  * Remote MCP endpoint (Streamable HTTP, stateless, JSON responses).
  *
  * Mounted at POST /mcp (public URL /api/mcp behind the bundled nginx). Only
- * Bearer API keys are accepted, so the route needs no CSRF protection, and no
- * OAuth metadata is advertised: MCP clients such as Claude Code skip their
- * static Authorization header when OAuth discovery succeeds.
+ * Bearer tokens are accepted (so the route needs no CSRF protection): OAuth
+ * access tokens issued by this server's own authorization server (see
+ * ../oauth) and personal API keys. Both are ApiKey rows, so the loopback REST
+ * calls made by the tools accept them too. A 401 points OAuth clients at the
+ * protected resource metadata (RFC 9728).
  */
 import express from "express";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { PrismaClient } from "../generated/client";
 import { authenticateApiKey, isApiKeyToken } from "../auth/apiKeys";
-import { config } from "../config";
+import { getOAuthPublicUrls, OAUTH_SCOPES } from "../oauth/constants";
+import { resolvePublicOrigin } from "./publicOrigin";
 import { createInternalApiClient, getInternalApiBaseUrl } from "./internalApi";
 import { createMcpServer } from "./tools";
 
@@ -39,50 +42,27 @@ const readBearerToken = (req: express.Request): string | null => {
   return token;
 };
 
-const normalizeOrigin = (origin: string): string | null => {
-  const withProtocol = /^https?:\/\//i.test(origin)
-    ? origin
-    : `http://${origin}`;
-  try {
-    return new URL(withProtocol).origin;
-  } catch {
-    return null;
-  }
-};
-
-const firstHeaderValue = (value: string | string[] | undefined) =>
-  (Array.isArray(value) ? value[0] : value)?.split(",")[0]?.trim() || "";
+export { resolvePublicOrigin };
 
 /**
- * Origin used for browser links in tool output: the FRONTEND_URL entry that
- * matches the host the client called (several may be configured), else the
- * first entry, else the request's own origin.
+ * RFC 6750 / RFC 9728 challenge: points OAuth clients at the protected
+ * resource metadata, from which they discover the authorization server.
  */
-export const resolvePublicOrigin = (req: express.Request): string => {
-  const configured = (config.frontendUrl ?? "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .map(normalizeOrigin)
-    .filter((entry): entry is string => entry !== null);
-  const host = firstHeaderValue(req.headers.host).toLowerCase();
-  const proto =
-    firstHeaderValue(req.headers["x-forwarded-proto"]).toLowerCase() ||
-    req.protocol;
-  if (configured.length > 0) {
-    const sameHost = configured.filter(
-      (origin) => new URL(origin).host.toLowerCase() === host,
-    );
-    return (
-      sameHost.find((origin) => origin.startsWith(`${proto}:`)) ??
-      sameHost[0] ??
-      configured[0]
-    );
-  }
-  return (
-    normalizeOrigin(`${proto === "https" ? "https" : "http"}://${host}`) ??
-    "http://localhost:6767"
-  );
+const sendUnauthorized = (
+  req: express.Request,
+  res: express.Response,
+  message: string,
+  tokenPresented: boolean,
+) => {
+  const params = [
+    ...(tokenPresented
+      ? ['error="invalid_token"', `error_description="${message}"`]
+      : []),
+    `resource_metadata="${getOAuthPublicUrls(req).resourceMetadata}"`,
+    `scope="${OAUTH_SCOPES.join(" ")}"`,
+  ];
+  res.setHeader("WWW-Authenticate", `Bearer ${params.join(", ")}`);
+  return jsonRpcError(res, 401, -32001, message);
 };
 
 export const registerMcpRoutes = (
@@ -91,14 +71,16 @@ export const registerMcpRoutes = (
 ) => {
   app.post("/mcp", async (req, res) => {
     const token = readBearerToken(req);
-    if (!token || !isApiKeyToken(token)) {
-      res.setHeader("WWW-Authenticate", "Bearer");
-      return jsonRpcError(
+    if (!token) {
+      return sendUnauthorized(
+        req,
         res,
-        401,
-        -32001,
-        "Unauthorized: send an API key as 'Authorization: Bearer <key>' (create one in Settings > API keys).",
+        "Unauthorized: sign in with OAuth, or send an API key as 'Authorization: Bearer <key>'",
+        false,
       );
+    }
+    if (!isApiKeyToken(token)) {
+      return sendUnauthorized(req, res, "Invalid access token", true);
     }
     let auth;
     try {
@@ -108,8 +90,12 @@ export const registerMcpRoutes = (
       return jsonRpcError(res, 500, -32603, "Failed to verify API key");
     }
     if (!auth) {
-      res.setHeader("WWW-Authenticate", "Bearer");
-      return jsonRpcError(res, 401, -32001, "Invalid or revoked API key");
+      return sendUnauthorized(
+        req,
+        res,
+        "Invalid, expired or revoked access token",
+        true,
+      );
     }
     if (auth.drawingId) {
       return jsonRpcError(

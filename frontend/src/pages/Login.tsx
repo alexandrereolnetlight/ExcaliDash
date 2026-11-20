@@ -43,6 +43,8 @@ export const Login: React.FC = () => {
   const oidcErrorCode = searchParams.get("oidcError");
   const oidcErrorMessage = searchParams.get("oidcErrorMessage");
   const oidcReturnTo = searchParams.get("returnTo") || "/";
+  // In-app paths only (no protocol-relative "//host" or "/\\host").
+  const localReturnTo = /^\/(?![/\\])/.test(oidcReturnTo) ? oidcReturnTo : "/";
   const mustReset = Boolean(user?.mustResetPassword) || queryMustReset;
   const passwordPolicy = getPasswordPolicy();
 
@@ -74,7 +76,7 @@ export const Login: React.FC = () => {
     }
     if (isAuthenticated) {
       if (mustReset) return;
-      navigate("/", { replace: true });
+      navigate(localReturnTo, { replace: true });
     }
   }, [
     authEnabled,
@@ -83,6 +85,7 @@ export const Login: React.FC = () => {
     authStatusError,
     bootstrapRequired,
     isAuthenticated,
+    localReturnTo,
     mustReset,
     navigate,
     oidcEnforced,
@@ -115,7 +118,7 @@ export const Login: React.FC = () => {
         setPassword("");
         return;
       }
-      navigate("/");
+      navigate(localReturnTo);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to login";
       setError(message);

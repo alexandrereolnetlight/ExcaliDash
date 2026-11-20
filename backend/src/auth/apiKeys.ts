@@ -78,6 +78,10 @@ export const parseApiKeyScopes = (raw: string | null | undefined): string[] =>
     .map((scope) => scope.trim())
     .filter((scope) => scope.length > 0);
 
+// An MCP call authenticates once on /mcp and again on every loopback REST
+// call, so the grant's "last used" time is only refreshed once a minute.
+const GRANT_LAST_USED_RESOLUTION_MS = 60 * 1000;
+
 // Shared by the HTTP middleware and the Socket.IO handshake, so both accept
 // and reject exactly the same keys.
 export const authenticateApiKey = async (
@@ -88,16 +92,41 @@ export const authenticateApiKey = async (
   if (!keyId) return null;
   const apiKey = await prisma.apiKey.findUnique({
     where: { keyId },
-    include: { user: true },
+    include: {
+      user: true,
+      oauthGrant: { select: { id: true, revokedAt: true, lastUsedAt: true } },
+    },
   });
   if (!apiKey || apiKey.revokedAt) return null;
   if (!apiKeyHashMatches(token, apiKey.tokenHash)) return null;
+  // OAuth access tokens expire and die with their grant.
+  const now = new Date();
+  if (apiKey.expiresAt && apiKey.expiresAt.getTime() <= now.getTime()) {
+    return null;
+  }
+  if (
+    apiKey.oauthGrantId &&
+    (!apiKey.oauthGrant || apiKey.oauthGrant.revokedAt)
+  )
+    return null;
   if (!apiKey.user.isActive) return null;
   try {
     await prisma.apiKey.update({
       where: { id: apiKey.id },
-      data: { lastUsedAt: new Date() },
+      data: { lastUsedAt: now },
     });
+    const grant = apiKey.oauthGrant;
+    if (
+      grant &&
+      (!grant.lastUsedAt ||
+        now.getTime() - grant.lastUsedAt.getTime() >
+          GRANT_LAST_USED_RESOLUTION_MS)
+    ) {
+      await prisma.oAuthGrant.update({
+        where: { id: grant.id },
+        data: { lastUsedAt: now },
+      });
+    }
   } catch (error) {
     console.warn("Failed to update API key lastUsedAt:", error);
   }
@@ -106,6 +135,7 @@ export const authenticateApiKey = async (
     user: apiKey.user,
     scopes: parseApiKeyScopes(apiKey.scopes),
     drawingId: apiKey.drawingId ?? null,
+    oauthGrantId: apiKey.oauthGrantId ?? null,
   };
 };
 

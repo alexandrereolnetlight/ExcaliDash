@@ -167,15 +167,23 @@ describe("MCP endpoint", () => {
         },
         body: JSON.stringify(initialize),
       });
-    for (const headers of [
-      {},
-      { Authorization: "Bearer exd_invalid_invalid" },
-      { Authorization: "Bearer not-an-api-key.jwt.token" },
-      { Authorization: `Basic ${Buffer.from("a:b").toString("base64")}` },
-    ]) {
+    const resourceMetadata =
+      'resource_metadata="https://first.example.test/.well-known/oauth-protected-resource/api/mcp"';
+    for (const [headers, tokenPresented] of [
+      [{}, false],
+      [{ Authorization: "Bearer exd_invalid_invalid" }, true],
+      [{ Authorization: "Bearer not-an-api-key.jwt.token" }, true],
+      [
+        { Authorization: `Basic ${Buffer.from("a:b").toString("base64")}` },
+        false,
+      ],
+    ] as const) {
       const response = await post(headers);
       expect(response.status, JSON.stringify(headers)).toBe(401);
-      expect(response.headers.get("www-authenticate")).toBe("Bearer");
+      const challenge = response.headers.get("www-authenticate") ?? "";
+      expect(challenge.startsWith("Bearer ")).toBe(true);
+      expect(challenge).toContain(resourceMetadata);
+      expect(challenge.includes('error="invalid_token"')).toBe(tokenPresented);
       const body = await response.json();
       expect(body.jsonrpc).toBe("2.0");
       expect(body.error.code).toBe(-32001);
@@ -187,10 +195,6 @@ describe("MCP endpoint", () => {
     });
     expect(withOrigin.status).toBe(200);
 
-    const oauth = await fetch(
-      `${baseUrl}/.well-known/oauth-protected-resource`,
-    );
-    expect(oauth.status).not.toBe(200);
     for (const method of ["GET", "DELETE"]) {
       const response = await fetch(`${baseUrl}/mcp`, {
         method,

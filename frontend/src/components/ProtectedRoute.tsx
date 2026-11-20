@@ -84,6 +84,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
       }
     }
 
+    // The OAuth consent page must come back here after a local sign-in.
+    if (location.pathname.startsWith("/oauth/")) {
+      const returnTo = `${location.pathname}${location.search}`;
+      return (
+        <Navigate
+          to={`/login?returnTo=${encodeURIComponent(returnTo)}`}
+          replace
+        />
+      );
+    }
+
     return <Navigate to="/login" replace />;
   }
 

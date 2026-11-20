@@ -44,6 +44,9 @@ const PasswordResetConfirm = lazy(() =>
     default: m.PasswordResetConfirm,
   })),
 );
+const OAuthConsent = lazy(() =>
+  import("./pages/OAuthConsent").then((m) => ({ default: m.OAuthConsent })),
+);
 const AuthSetupChoice = lazy(() =>
   import("./pages/AuthSetupChoice").then((m) => ({
     default: m.AuthSetupChoice,
@@ -122,6 +125,14 @@ function App() {
                       element={
                         <ProtectedRoute>
                           <Editor />
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/oauth/consent"
+                      element={
+                        <ProtectedRoute>
+                          <OAuthConsent />
                         </ProtectedRoute>
                       }
                     />

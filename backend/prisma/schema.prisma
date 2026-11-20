@@ -28,6 +28,8 @@ model User {
   passwordResetTokens PasswordResetToken[]
   refreshTokens       RefreshToken[]
   apiKeys             ApiKey[]
+  oauthAuthorizationCodes OAuthAuthorizationCode[]
+  oauthGrants         OAuthGrant[]
   auditLogs           AuditLog[]
   chatGptConnection   ChatGptConnection?
   createdAt           DateTime            @default(now())
@@ -226,12 +228,111 @@ model ApiKey {
   drawing    Drawing?  @relation(fields: [drawingId], references: [id], onDelete: Cascade)
   lastUsedAt DateTime?
   revokedAt  DateTime?
+  // OAuth access tokens are short-lived API keys bound to an OAuth grant.
+  // Personal API keys leave both columns null (no expiry, no grant).
+  expiresAt    DateTime?
+  oauthGrantId String?
+  oauthGrant   OAuthGrant? @relation(fields: [oauthGrantId], references: [id], onDelete: Cascade)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
   @@index([userId, createdAt])
   @@index([keyId, revokedAt])
   @@index([drawingId])
+  @@index([oauthGrantId])
+  @@index([expiresAt])
+}
+
+/// OAuth 2.1 client registered through Dynamic Client Registration (RFC 7591).
+/// Public clients only (no secret); redirect URIs are loopback-only.
+model OAuthClient {
+  id                    String                      @id
+  /// Self-reported by the client, so never trusted for anything but display.
+  clientName            String?
+  /// JSON array of registered redirect URIs.
+  redirectUris          String
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  authorizationRequests OAuthAuthorizationRequest[]
+  authorizationCodes    OAuthAuthorizationCode[]
+  grants                OAuthGrant[]
+
+  @@index([createdAt])
+}
+
+/// Validated /oauth/authorize request waiting for the user's consent.
+model OAuthAuthorizationRequest {
+  id            String      @id @default(uuid())
+  requestHash   String      @unique
+  clientId      String
+  client        OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  state         String?
+  scopes        String
+  resource      String?
+  expiresAt     DateTime
+  createdAt     DateTime    @default(now())
+
+  @@index([clientId])
+  @@index([expiresAt])
+}
+
+/// Single-use authorization code issued after consent.
+model OAuthAuthorizationCode {
+  id            String      @id @default(uuid())
+  codeHash      String      @unique
+  clientId      String
+  client        OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  redirectUri   String
+  codeChallenge String
+  scopes        String
+  resource      String?
+  /// Grant created when the code was exchanged; revoked if the code is replayed.
+  grantId       String?
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime    @default(now())
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// A user's consent for one OAuth client: owns its refresh and access tokens.
+model OAuthGrant {
+  id            String              @id @default(uuid())
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String
+  client        OAuthClient         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  scopes        String
+  resource      String?
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+  createdAt     DateTime            @default(now())
+  refreshTokens OAuthRefreshToken[]
+  accessTokens  ApiKey[]
+
+  @@index([userId, revokedAt])
+  @@index([clientId])
+}
+
+/// Rotating refresh token: each use issues a new one and marks this one used.
+model OAuthRefreshToken {
+  id        String     @id @default(uuid())
+  tokenHash String     @unique
+  grantId   String
+  grant     OAuthGrant @relation(fields: [grantId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
+  revokedAt DateTime?
+  createdAt DateTime   @default(now())
+
+  @@index([grantId])
+  @@index([expiresAt])
 }
 
 model AuditLog {

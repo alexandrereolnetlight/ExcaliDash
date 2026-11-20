@@ -50,6 +50,7 @@ import { initS3, isS3Enabled, checkBucketReachable } from "./s3";
 import { startScheduledBackups } from "./backups/scheduler";
 import { runStorageDoctor } from "./server/storageDoctor";
 import { registerMcpRoutes } from "./mcp/routes";
+import { registerOAuthRoutes } from "./oauth/routes";
 import {
   isInternalApiRequest,
   recordListeningAddress,
@@ -337,8 +338,11 @@ const generalRateLimiter = rateLimit({
   skip: (req) => isInternalApiRequest(req),
 });
 app.use(generalRateLimiter);
-// Bearer-API-key-only endpoint, so it is registered ahead of CSRF protection.
+// Bearer-token-only endpoint, so it is registered ahead of CSRF protection.
 registerMcpRoutes(app, { prisma, getBackendVersion });
+// OAuth authorization server for /mcp (metadata, authorize, token, register,
+// revoke): cookie-less endpoints called by MCP clients, so no CSRF either.
+const oauthStore = registerOAuthRoutes(app, { prisma });
 registerCsrfProtection({
   app,
   isAllowedOrigin,
@@ -674,6 +678,7 @@ if (isMain) {
             `[Cleanup] Deleted ${result.count} old drawing snapshots`,
           );
         }
+        await oauthStore.cleanupExpired(true);
         await reclaimSqliteFreeSpace(prisma, config.databaseUrl ?? "");
       } catch (err) {
         console.error("[Cleanup] Snapshot cleanup failed:", err);

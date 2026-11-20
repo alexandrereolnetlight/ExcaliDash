@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import { PrismaClient } from "../generated/client";
 import type { Mailer } from "../mail/mailer";
 import { registerAccountApiKeyRoutes } from "./accountApiKeyRoutes";
+import { registerAccountOAuthRoutes } from "./accountOAuthRoutes";
 import { registerAccountPasswordChangeRoutes } from "./accountPasswordChangeRoutes";
 import { registerAccountPasswordResetRoutes } from "./accountPasswordResetRoutes";
 import { registerAccountPreferencesRoutes } from "./accountPreferencesRoutes";
@@ -46,5 +47,6 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
   registerAccountPreferencesRoutes(deps);
   registerAccountProfileRoutes(deps);
   registerAccountApiKeyRoutes(deps);
+  registerAccountOAuthRoutes(deps);
   registerAccountPasswordChangeRoutes(deps);
 };
