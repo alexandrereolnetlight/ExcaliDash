@@ -1,17 +1,29 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import type { ReactNode } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   authStatus,
   authMe,
-  authRefresh,
+  refreshAccessToken,
   authLogout,
   authLogin,
   authRegister,
   isAxiosError,
-} from '../api';
+  startOidcSignOut,
+} from "../api";
+import { toast } from "sonner";
+import {
+  clearOidcAutoLoginSuppression,
+  suppressOidcAutoLogin,
+} from "../utils/oidcLogout";
 
-interface User {
+export interface User {
   id: string;
   username?: string | null;
   email: string;
@@ -26,38 +38,50 @@ interface AuthContextType {
   authEnabled: boolean | null;
   registrationEnabled: boolean;
   authStatusError: string | null;
-  authMode: 'local' | 'hybrid' | 'oidc_enforced';
+  authMode: "local" | "hybrid" | "oidc_enforced";
   oidcEnabled: boolean;
   oidcEnforced: boolean;
   oidcProvider: string | null;
   bootstrapRequired: boolean;
   authOnboardingRequired: boolean;
-  authOnboardingMode: 'migration' | 'fresh' | null;
+  authOnboardingMode: "migration" | "fresh" | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string, setupCode?: string) => Promise<void>;
-  logout: () => void;
+  register: (
+    email: string,
+    password: string,
+    name: string,
+    setupCode?: string,
+  ) => Promise<void>;
+  logout: () => Promise<void>;
+  updateUser: (updates: Partial<User>) => void;
   retryAuthStatus: () => Promise<void>;
   isAuthenticated: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const USER_KEY = 'excalidash-user';
+const USER_KEY = "excalidash-user";
 const AUTH_ENABLED_CACHE_KEY = "excalidash-auth-enabled";
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [authEnabled, setAuthEnabled] = useState<boolean | null>(null);
   const [registrationEnabled, setRegistrationEnabled] = useState(false);
   const [authStatusError, setAuthStatusError] = useState<string | null>(null);
-  const [authMode, setAuthMode] = useState<'local' | 'hybrid' | 'oidc_enforced'>('local');
+  const [authMode, setAuthMode] = useState<
+    "local" | "hybrid" | "oidc_enforced"
+  >("local");
   const [oidcEnabled, setOidcEnabled] = useState(false);
   const [oidcEnforced, setOidcEnforced] = useState(false);
   const [oidcProvider, setOidcProvider] = useState<string | null>(null);
   const [bootstrapRequired, setBootstrapRequired] = useState(false);
   const [authOnboardingRequired, setAuthOnboardingRequired] = useState(false);
-  const [authOnboardingMode, setAuthOnboardingMode] = useState<'migration' | 'fresh' | null>(null);
+  const [authOnboardingMode, setAuthOnboardingMode] = useState<
+    "migration" | "fresh" | null
+  >(null);
   const navigate = useNavigate();
 
   const loadUser = useCallback(async () => {
@@ -78,19 +102,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         localStorage.setItem(AUTH_ENABLED_CACHE_KEY, String(enabled));
         setRegistrationEnabled(Boolean(statusResponse?.registrationEnabled));
         const nextAuthMode =
-          statusResponse?.authMode === 'hybrid' || statusResponse?.authMode === 'oidc_enforced'
+          statusResponse?.authMode === "hybrid" ||
+          statusResponse?.authMode === "oidc_enforced"
             ? statusResponse.authMode
-            : 'local';
+            : "local";
         setAuthMode(nextAuthMode);
         setOidcEnabled(Boolean(statusResponse?.oidcEnabled));
         setOidcEnforced(Boolean(statusResponse?.oidcEnforced));
-        setOidcProvider(typeof statusResponse?.oidcProvider === 'string' ? statusResponse.oidcProvider : null);
+        setOidcProvider(
+          typeof statusResponse?.oidcProvider === "string"
+            ? statusResponse.oidcProvider
+            : null,
+        );
         setBootstrapRequired(Boolean(statusResponse?.bootstrapRequired));
-        setAuthOnboardingRequired(Boolean(statusResponse?.authOnboardingRequired));
+        setAuthOnboardingRequired(
+          Boolean(statusResponse?.authOnboardingRequired),
+        );
         setAuthOnboardingMode(
-          statusResponse?.authOnboardingMode === 'migration' || statusResponse?.authOnboardingMode === 'fresh'
+          statusResponse?.authOnboardingMode === "migration" ||
+            statusResponse?.authOnboardingMode === "fresh"
             ? statusResponse.authOnboardingMode
-            : null
+            : null,
         );
 
         if (!enabled) {
@@ -104,7 +136,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setAuthStatusError(null);
           setAuthEnabled(false);
           setRegistrationEnabled(false);
-          setAuthMode('local');
+          setAuthMode("local");
           setOidcEnabled(false);
           setOidcEnforced(false);
           setOidcProvider(null);
@@ -116,11 +148,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           return;
         }
         setAuthStatusError(
-          "Unable to reach the backend API. Check BACKEND_URL, FRONTEND_URL, and your reverse proxy configuration."
+          "Unable to reach the backend API. Check BACKEND_URL, FRONTEND_URL, and your reverse proxy configuration.",
         );
         setAuthEnabled(null);
         setRegistrationEnabled(false);
-        setAuthMode('local');
+        setAuthMode("local");
         setOidcEnabled(false);
         setOidcEnforced(false);
         setOidcProvider(null);
@@ -150,16 +182,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       try {
         const response = await authMe();
+        clearOidcAutoLoginSuppression();
         setUser(response.user);
         localStorage.setItem(USER_KEY, JSON.stringify(response.user));
       } catch {
-        if (isShareFlow) {
-          localStorage.removeItem(USER_KEY);
-          setUser(null);
-          return;
-        }
         try {
-          await authRefresh();
+          // The shared single-flight refresh: mounting Editor and AuthContext
+          // both discover an expired access token on a reloaded background
+          // tab. Independent refreshes would race the single-use token
+          // rotation and one side would tear down a session that is, in
+          // fact, still valid. Share-link pages run this too: a signed-in
+          // visitor with an expired access token must not dead-end on a
+          // page that never refreshes. Anonymous visitors simply fail the
+          // refresh and stay anonymous, as before.
+          await refreshAccessToken();
           const userResponse = await authMe();
           setUser(userResponse.user);
           localStorage.setItem(USER_KEY, JSON.stringify(userResponse.user));
@@ -169,9 +205,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       }
     } catch (error) {
-      console.error('Failed to load user:', error);
+      console.error("Failed to load user:", error);
       setAuthStatusError(
-        "Unable to initialize authentication state. Check backend/API connectivity and refresh."
+        "Unable to initialize authentication state. Check backend/API connectivity and refresh.",
       );
       localStorage.removeItem(USER_KEY);
       setUser(null);
@@ -201,19 +237,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error: unknown) {
       if (isAxiosError(error)) {
         const message =
-          typeof error.response?.data === 'object' &&
+          typeof error.response?.data === "object" &&
           error.response.data !== null &&
-          'message' in error.response.data &&
-          typeof error.response.data.message === 'string'
+          "message" in error.response.data &&
+          typeof error.response.data.message === "string"
             ? error.response.data.message
-            : 'Login failed';
+            : "Login failed";
         throw new Error(message);
       }
-      throw error instanceof Error ? error : new Error('Login failed');
+      throw error instanceof Error ? error : new Error("Login failed");
     }
   };
 
-  const register = async (email: string, password: string, name: string, setupCode?: string) => {
+  const register = async (
+    email: string,
+    password: string,
+    name: string,
+    setupCode?: string,
+  ) => {
     try {
       if (authEnabled === false) {
         throw new Error("Authentication is disabled");
@@ -230,25 +271,46 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error: unknown) {
       if (isAxiosError(error)) {
         const message =
-          typeof error.response?.data === 'object' &&
+          typeof error.response?.data === "object" &&
           error.response.data !== null &&
-          'message' in error.response.data &&
-          typeof error.response.data.message === 'string'
+          "message" in error.response.data &&
+          typeof error.response.data.message === "string"
             ? error.response.data.message
-            : 'Registration failed';
+            : "Registration failed";
         throw new Error(message);
       }
-      throw error instanceof Error ? error : new Error('Registration failed');
+      throw error instanceof Error ? error : new Error("Registration failed");
     }
   };
 
-  const logout = () => {
-    void authLogout().catch(() => undefined);
+  const logout = async () => {
+    let oidcLogout = false;
+    try {
+      oidcLogout = (await authLogout()).oidcLogout;
+    } catch (error) {
+      // Do not claim that the user signed out when the server session could
+      // still be refreshed. This also avoids an enforced-OIDC redirect loop.
+      console.error("Logout failed", error);
+      toast.error("Could not sign out. Please try again.");
+      return;
+    }
+    suppressOidcAutoLogin();
     localStorage.removeItem(USER_KEY);
     setUser(null);
-    setTimeout(() => {
-      navigate('/login');
-    }, 0);
+    if (oidcLogout) {
+      startOidcSignOut();
+      return;
+    }
+    navigate("/login");
+  };
+
+  const updateUser = (updates: Partial<User>) => {
+    setUser((currentUser) => {
+      if (!currentUser) return currentUser;
+      const nextUser = { ...currentUser, ...updates };
+      localStorage.setItem(USER_KEY, JSON.stringify(nextUser));
+      return nextUser;
+    });
   };
 
   return (
@@ -269,6 +331,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         login,
         register,
         logout,
+        updateUser,
         retryAuthStatus: loadUser,
         isAuthenticated: !!user,
       }}
@@ -281,7 +344,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };

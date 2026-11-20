@@ -17,7 +17,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
     jwt.sign(
       { userId: user.id, email: user.email, type: "refresh" },
       config.jwtSecret,
-      { expiresIn: config.jwtRefreshExpiresIn as StringValue }
+      { expiresIn: config.jwtRefreshExpiresIn as StringValue },
     );
 
   let prisma: PrismaClient;
@@ -47,14 +47,19 @@ describe("Link Sharing - Public By Drawing ID", () => {
 
   const createLinkShare = async (
     drawingId: string,
-    permission: "view" | "edit"
+    permission: "view" | "edit",
+    body?: { expiresAt?: string | null },
   ) => {
+    const payload: Record<string, unknown> = { permission };
+    if (body && Object.prototype.hasOwnProperty.call(body, "expiresAt")) {
+      payload.expiresAt = body.expiresAt;
+    }
     const response = await ownerAgent
       .post(`/drawings/${drawingId}/link-shares`)
       .set("User-Agent", userAgent)
       .set("Authorization", `Bearer ${ownerToken}`)
       .set(ownerCsrfHeaderName, ownerCsrfToken)
-      .send({ permission });
+      .send(payload);
 
     expect(response.status).toBe(200);
     return response;
@@ -110,7 +115,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
     ownerToken = jwt.sign(
       { userId: ownerUser.id, email: ownerUser.email, type: "access" },
       config.jwtSecret,
-      signOptions
+      signOptions,
     );
 
     ownerAgent = request.agent(app);
@@ -156,7 +161,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
       .set("User-Agent", userAgent)
       .set(
         "Cookie",
-        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`
+        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`,
       );
 
     expect(response.status).toBe(200);
@@ -173,7 +178,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
       .set("User-Agent", userAgent)
       .set(
         "Cookie",
-        `${REFRESH_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`
+        `${REFRESH_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`,
       );
 
     expect(response.status).toBe(200);
@@ -208,7 +213,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
       .set("User-Agent", userAgent)
       .set(
         "Cookie",
-        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`
+        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`,
       )
       .set(anonCsrfHeaderName, anonCsrfToken)
       .send({ name: "Edited With Stale Cookie" });
@@ -229,7 +234,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
       .set("User-Agent", userAgent)
       .set(
         "Cookie",
-        `${REFRESH_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`
+        `${REFRESH_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`,
       )
       .set(anonCsrfHeaderName, anonCsrfToken)
       .send({ name: "Edited With Refresh Cookie" });
@@ -247,7 +252,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
       .set("User-Agent", userAgent)
       .set(
         "Cookie",
-        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`
+        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`,
       );
 
     expect(response.status).toBe(401);
@@ -262,7 +267,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
       .set("User-Agent", userAgent)
       .set(
         "Cookie",
-        `${REFRESH_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`
+        `${REFRESH_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`,
       );
 
     expect(response.status).toBe(401);
@@ -279,7 +284,7 @@ describe("Link Sharing - Public By Drawing ID", () => {
       .set("User-Agent", userAgent)
       .set(
         "Cookie",
-        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`
+        `${ACCESS_TOKEN_COOKIE_NAME}=${createRefreshToken(ownerUser)}`,
       )
       .set(anonCsrfHeaderName, anonCsrfToken)
       .send({ name: "Should Fail" });
@@ -319,5 +324,52 @@ describe("Link Sharing - Public By Drawing ID", () => {
       where: { drawingId: drawing.id, revokedAt: null },
     });
     expect(activeCount).toBe(1);
+  });
+
+  it("pauses the link share while the drawing is in Trash and resumes it on restore", async () => {
+    const drawing = await createDrawing();
+    await createLinkShare(drawing.id, "edit");
+    const moveTo = (collectionId: string | null) =>
+      ownerAgent
+        .put(`/drawings/${drawing.id}`)
+        .set("User-Agent", userAgent)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .set(ownerCsrfHeaderName, ownerCsrfToken)
+        .send({ collectionId });
+    const anonGet = () =>
+      request(app).get(`/drawings/${drawing.id}`).set("User-Agent", userAgent);
+    const { anonAgent, anonCsrfHeaderName, anonCsrfToken } =
+      await createAnonymousAgentWithCsrf();
+    const anonPut = (name: string) =>
+      anonAgent
+        .put(`/drawings/${drawing.id}`)
+        .set("User-Agent", userAgent)
+        .set(anonCsrfHeaderName, anonCsrfToken)
+        .send({ name });
+
+    const trashed = await moveTo("trash");
+    expect(trashed.status).toBe(200);
+
+    expect((await anonGet()).status).toBe(404);
+    expect((await anonPut("Edited In Trash")).status).toBe(404);
+    const unchanged = await prisma.drawing.findUnique({
+      where: { id: drawing.id },
+      select: { name: true },
+    });
+    expect(unchanged?.name).toBe("Shared Drawing");
+    // the share row is kept, only paused
+    expect(
+      await prisma.drawingLinkShare.count({
+        where: { drawingId: drawing.id, revokedAt: null },
+      }),
+    ).toBe(1);
+
+    const restored = await moveTo(null);
+    expect(restored.status).toBe(200);
+
+    const resumed = await anonGet();
+    expect(resumed.status).toBe(200);
+    expect(resumed.body?.accessLevel).toBe("edit");
+    expect((await anonPut("Edited After Restore")).status).toBe(200);
   });
 });

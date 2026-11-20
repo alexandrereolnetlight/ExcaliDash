@@ -20,12 +20,11 @@ jobs:
       packages: write
     strategy:
       matrix:
-        # Each component has a different build context (matches docker-compose.yml):
-        #   backend  -> context ./backend
-        #   frontend -> context . (repo root, needs the root VERSION file)
+        # Since upstream 0.6.x both Dockerfiles build from the repo root
+        # (they COPY backend/... and frontend/... paths).
         include:
           - component: backend
-            context: ./backend
+            context: .
             dockerfile: ./backend/Dockerfile
           - component: frontend
             context: .
