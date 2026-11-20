@@ -10,6 +10,7 @@ import { SettingsMainGrid } from "./settings/SettingsMainGrid";
 import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { SettingsConfirmModals } from "./settings/SettingsConfirmModals";
 import { ApiKeysCard } from "./profile/ApiKeysCard";
+import { AgentConnectCard } from "./settings/AgentConnectCard";
 import { Toaster } from "sonner";
 import { displayFontFamily } from "../utils/displayFont";
 import {
@@ -38,6 +39,7 @@ export const Settings: React.FC = () => {
   );
   const mustResetPassword = Boolean(user?.mustResetPassword);
   const [settingsSuccess, setSettingsSuccess] = useState("");
+  const [apiKeysRefreshToken, setApiKeysRefreshToken] = useState(0);
   const [legacyDbImportConfirmation, setLegacyDbImportConfirmation] = useState<{
     isOpen: boolean;
     file: File | null;
@@ -353,6 +355,12 @@ export const Settings: React.FC = () => {
           <ApiKeysCard
             disabled={mustResetPassword}
             onSuccess={setSettingsSuccess}
+            refreshToken={apiKeysRefreshToken}
+          />
+          <AgentConnectCard
+            disabled={mustResetPassword}
+            onSuccess={setSettingsSuccess}
+            onKeyCreated={() => setApiKeysRefreshToken((value) => value + 1)}
           />
         </div>
         <div className="mt-10">

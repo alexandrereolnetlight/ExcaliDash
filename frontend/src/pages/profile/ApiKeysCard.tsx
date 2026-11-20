@@ -3,6 +3,7 @@ import { Copy, KeyRound, Trash2 } from "lucide-react";
 import * as api from "../../api";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { InfoPopover } from "../../components/InfoPopover";
+import { copyTextToClipboard } from "../../utils/clipboard";
 import {
   SettingsCard,
   SettingsSectionHeader,
@@ -35,9 +36,15 @@ const formatApiKeyDate = (value: string | null) => {
 type Props = {
   disabled: boolean;
   onSuccess: (message: string) => void;
+  /** Change to reload the list, e.g. after a key was created elsewhere. */
+  refreshToken?: number;
 };
 
-export const ApiKeysCard: React.FC<Props> = ({ disabled, onSuccess }) => {
+export const ApiKeysCard: React.FC<Props> = ({
+  disabled,
+  onSuccess,
+  refreshToken = 0,
+}) => {
   const [apiKeys, setApiKeys] = useState<api.ApiKeyMetadata[]>([]);
   const [apiKeysLoading, setApiKeysLoading] = useState(false);
   const [apiKeyName, setApiKeyName] = useState("");
@@ -74,7 +81,7 @@ export const ApiKeysCard: React.FC<Props> = ({ disabled, onSuccess }) => {
     };
 
     void fetchApiKeys();
-  }, [disabled]);
+  }, [disabled, refreshToken]);
 
   const handleCreateApiKey = async () => {
     if (disabled || apiKeysLoading) return;
@@ -107,19 +114,7 @@ export const ApiKeysCard: React.FC<Props> = ({ disabled, onSuccess }) => {
   const handleCopyGeneratedToken = async () => {
     if (!generatedToken) return;
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(generatedToken);
-      } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = generatedToken;
-        textarea.setAttribute("readonly", "true");
-        textarea.style.position = "fixed";
-        textarea.style.left = "-9999px";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      }
+      await copyTextToClipboard(generatedToken);
       setCopiedToken(true);
       onSuccess("API key token copied to clipboard");
       window.setTimeout(() => setCopiedToken(false), 1500);

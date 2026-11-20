@@ -49,6 +49,11 @@ import { internDrawingFiles as internDrawingFilesWithPrisma } from "./fileProces
 import { initS3, isS3Enabled, checkBucketReachable } from "./s3";
 import { startScheduledBackups } from "./backups/scheduler";
 import { runStorageDoctor } from "./server/storageDoctor";
+import { registerMcpRoutes } from "./mcp/routes";
+import {
+  isInternalApiRequest,
+  recordListeningAddress,
+} from "./mcp/internalApi";
 const backendRoot = path.resolve(__dirname, "../");
 const redactDatabaseUrl = (value: string | undefined): string => {
   if (!value) return "<unset>";
@@ -168,6 +173,9 @@ if (trustProxyValue === true) {
   console.log(`[config] trust proxy: ${trustProxyValue}`);
 }
 const httpServer = createServer(app);
+// The MCP tools call this server's REST API over loopback; remember where it
+// actually listens (also for tests that listen on an ephemeral port).
+httpServer.on("listening", () => recordListeningAddress(httpServer));
 const io = new Server(httpServer, {
   cors: {
     origin: (origin, cb) => cb(null, isAllowedOrigin(origin ?? undefined)),
@@ -257,6 +265,8 @@ const shouldEnforceHttps =
 if (shouldEnforceHttps) {
   const httpsRedirectPolicy = createHttpsRedirectPolicy(allowedOrigins);
   app.use((req, res, next) => {
+    // MCP loopback calls: the originating /mcp request already passed this.
+    if (isInternalApiRequest(req)) return next();
     const redirectUrl = getHttpsRedirectUrl(req, httpsRedirectPolicy);
     if (!redirectUrl) return next();
     return res.redirect(redirectUrl);
@@ -323,8 +333,12 @@ const generalRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   validate: { trustProxy: false, xForwardedForHeader: false },
+  // MCP loopback calls are already counted as the originating /mcp request.
+  skip: (req) => isInternalApiRequest(req),
 });
 app.use(generalRateLimiter);
+// Bearer-API-key-only endpoint, so it is registered ahead of CSRF protection.
+registerMcpRoutes(app, { prisma, getBackendVersion });
 registerCsrfProtection({
   app,
   isAllowedOrigin,

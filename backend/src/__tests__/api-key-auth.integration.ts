@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import bcrypt from "bcrypt";
+import jwt from "jsonwebtoken";
+import { config } from "../config";
 import { PrismaClient } from "../generated/client";
 import { generateApiKey, serializeApiKeyScopes } from "../auth/apiKeys";
 import { getTestPrisma, setupTestDb } from "./testUtils";
@@ -117,6 +119,74 @@ describe("API key authentication", () => {
 
     expect(collectionsResponse.status).toBe(200);
     expect(drawingsResponse.status).toBe(200);
+  });
+
+  describe("creating keys with scopes", () => {
+    const userAgent = "vitest-api-key-scopes";
+    let agent: any;
+    let csrfHeaderName: string;
+    let csrfToken: string;
+    let sessionToken: string;
+
+    beforeAll(async () => {
+      sessionToken = jwt.sign(
+        { userId, email: "api-key-user@test.local", type: "access" },
+        config.jwtSecret,
+        { expiresIn: "15m" },
+      );
+      agent = request.agent(app);
+      const csrf = await agent.get("/csrf-token").set("User-Agent", userAgent);
+      csrfHeaderName = csrf.body.header;
+      csrfToken = csrf.body.token;
+    });
+
+    const createKey = (body: Record<string, unknown>) =>
+      agent
+        .post("/auth/api-keys")
+        .set("User-Agent", userAgent)
+        .set("Authorization", `Bearer ${sessionToken}`)
+        .set(csrfHeaderName, csrfToken)
+        .send(body);
+
+    it("defaults to every scope", async () => {
+      const response = await createKey({ name: "Default scopes" });
+      expect(response.status).toBe(201);
+      expect(response.body.apiKey.scopes).toEqual([
+        "drawings:read",
+        "drawings:write",
+        "collections:read",
+        "collections:write",
+      ]);
+    });
+
+    it("stores only the requested scopes and enforces them", async () => {
+      const response = await createKey({
+        name: "AI agent (read-only)",
+        scopes: ["drawings:read", "collections:read"],
+      });
+      expect(response.status).toBe(201);
+      expect(response.body.apiKey.scopes).toEqual([
+        "drawings:read",
+        "collections:read",
+      ]);
+      const token = response.body.token as string;
+      const read = await request(app)
+        .get("/drawings")
+        .set("Authorization", `Bearer ${token}`);
+      expect(read.status).toBe(200);
+      const write = await request(app)
+        .post("/drawings")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ name: "Denied", elements: [], appState: {} });
+      expect(write.status).toBe(403);
+    });
+
+    it("rejects unknown or empty scope lists", async () => {
+      for (const scopes of [["drawings:delete"], [], "drawings:read"]) {
+        const response = await createKey({ name: "Bad scopes", scopes });
+        expect(response.status, JSON.stringify(scopes)).toBe(400);
+      }
+    });
   });
 
   it("rejects API key management with API key auth", async () => {
