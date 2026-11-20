@@ -25,6 +25,7 @@ import {
 } from "./coreRouteHelpers";
 import { canUseLocalPasswordFlows } from "./localPassword";
 import { authModeEnablesAuth } from "../config";
+import { isEmailManagedByIdentityProvider } from "./emailManagement";
 type RegisterCoreRoutesDeps = {
   router: express.Router;
   prisma: PrismaClient;
@@ -851,7 +852,9 @@ export const registerCoreRoutes = (deps: RegisterCoreRoutesDeps) => {
           .status(404)
           .json({ error: "Not found", message: "User not found" });
       }
-      res.json({ user });
+      const emailManagedByIdentityProvider =
+        await isEmailManagedByIdentityProvider(prisma, user.id);
+      res.json({ user: { ...user, emailManagedByIdentityProvider } });
     } catch (error) {
       console.error("Get user error:", error);
       res.status(500).json({

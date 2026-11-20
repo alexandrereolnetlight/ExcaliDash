@@ -30,6 +30,8 @@ export interface User {
   name: string;
   role?: "ADMIN" | "USER" | string;
   mustResetPassword?: boolean;
+  /** True when the email comes from the SSO provider and can't be edited. */
+  emailManagedByIdentityProvider?: boolean;
   avatarUrl?: string | null;
 }
 

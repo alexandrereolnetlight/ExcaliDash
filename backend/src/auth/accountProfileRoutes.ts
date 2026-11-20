@@ -4,6 +4,7 @@ import { logAuditEvent } from "../utils/audit";
 import { config as appConfig } from "../config";
 import { updateEmailSchema, updateProfileSchema } from "./schemas";
 import { canUseLocalPasswordFlows } from "./localPassword";
+import { isEmailManagedByIdentityProvider } from "./emailManagement";
 import { hashTokenForStorage } from "./tokenSecurity";
 import type { RegisterAccountRoutesDeps } from "./accountRoutes";
 
@@ -117,6 +118,15 @@ export const registerAccountProfileRoutes = (
           return res.status(401).json({
             error: "Unauthorized",
             message: "User account not found or inactive",
+          });
+        }
+        // Checked before the password so this route can't be used as a
+        // password oracle for SSO accounts (e.g. after an admin temp reset).
+        if (await isEmailManagedByIdentityProvider(prisma, user.id)) {
+          return res.status(403).json({
+            error: "Forbidden",
+            message:
+              "Your email is managed by your sign-in provider and can't be changed here.",
           });
         }
         if (!canUseLocalPasswordFlows(user)) {

@@ -24,9 +24,11 @@ export const Profile: React.FC = () => {
     authEnabled,
     authMode,
     updateUser,
+    oidcProvider,
   } = useAuth();
   const navigate = useNavigate();
   const mustResetPassword = Boolean(authUser?.mustResetPassword);
+  const emailManagedByIdp = Boolean(authUser?.emailManagedByIdentityProvider);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -249,23 +251,29 @@ export const Profile: React.FC = () => {
                         {email}
                       </p>
                     </div>
-                    {!showEmailForm && (
-                      <button
-                        onClick={() => {
-                          setShowEmailForm(true);
-                          setEmailCurrentPassword("");
-                          setError("");
-                          setSuccess("");
-                        }}
-                        disabled={mustResetPassword}
-                        className={`${settingsButtonClass} ml-auto`}
-                      >
-                        Change
-                      </button>
+                    {emailManagedByIdp ? (
+                      <span className="ml-auto text-xs font-medium text-slate-500 dark:text-neutral-400">
+                        Managed by {oidcProvider || "your sign-in provider"}
+                      </span>
+                    ) : (
+                      !showEmailForm && (
+                        <button
+                          onClick={() => {
+                            setShowEmailForm(true);
+                            setEmailCurrentPassword("");
+                            setError("");
+                            setSuccess("");
+                          }}
+                          disabled={mustResetPassword}
+                          className={`${settingsButtonClass} ml-auto`}
+                        >
+                          Change
+                        </button>
+                      )
                     )}
                   </div>
 
-                  {showEmailForm && (
+                  {showEmailForm && !emailManagedByIdp && (
                     <div className="mt-3 max-w-md space-y-3">
                       <div>
                         <label

@@ -53,6 +53,8 @@ export interface AuthUser {
   name: string;
   role?: string;
   mustResetPassword?: boolean;
+  /** True when the email comes from the SSO provider and can't be edited. */
+  emailManagedByIdentityProvider?: boolean;
   avatarUrl?: string | null;
 }
 
