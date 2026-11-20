@@ -9,6 +9,7 @@ import { UpdateBanner } from "./UpdateBanner";
 import type { Collection } from "../types";
 import clsx from "clsx";
 import { displayFontFamily } from "../utils/displayFont";
+import { APP_NAME } from "../branding";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -141,7 +142,7 @@ export const Layout: React.FC<LayoutProps> = ({
                   className="text-xl text-slate-900 dark:text-white mt-1"
                   style={{ fontFamily: displayFontFamily }}
                 >
-                  ExcaliDash
+                  {APP_NAME}
                 </span>
                 <span className="mt-2 text-[10px] font-bold text-red-500">
                   Beta

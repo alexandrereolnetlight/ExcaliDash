@@ -15,6 +15,7 @@ import {
   settingsPrimaryButtonClass,
   settingsSelectClass,
 } from "./settings/SettingsRow";
+import { APP_NAME } from "../branding";
 
 export const Profile: React.FC = () => {
   const {
@@ -197,7 +198,7 @@ export const Profile: React.FC = () => {
                     Password reset required
                   </p>
                   <p className="text-xs text-amber-800 dark:text-amber-200/80 font-medium mt-0.5">
-                    Change your password below before using ExcaliDash.
+                    Change your password below before using {APP_NAME}.
                   </p>
                 </div>
               )}
