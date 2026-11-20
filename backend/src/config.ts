@@ -56,6 +56,11 @@ interface BackupConfig {
   retentionDays: number;
 }
 
+interface NetlightApiConfig {
+  /** Base URL of the Netlight API (no trailing slash); null disables avatar lookup. */
+  url: string | null;
+}
+
 interface Config {
   port: number;
   listenHost: string;
@@ -97,6 +102,7 @@ interface Config {
   linkShare: LinkShareConfig;
   updateCheck: UpdateCheckConfig;
   mail: MailConfig;
+  netlightApi: NetlightApiConfig;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced" | "disabled";
@@ -332,6 +338,11 @@ const resolveS3Config = (): S3Config => ({
   secretAccessKey: readOptionalString("AWS_SECRET_ACCESS_KEY"),
 });
 
+const resolveNetlightApiConfig = (): NetlightApiConfig => {
+  const url = readOptionalString("NETLIGHT_API_URL")?.replace(/\/+$/, "");
+  return { url: url || null };
+};
+
 export const config: Config = {
   port: readNumber("PORT", 8000),
   listenHost: readString("BACKEND_HOST", "0.0.0.0"),
@@ -380,6 +391,7 @@ export const config: Config = {
   linkShare: resolveLinkShareConfig(),
   updateCheck: resolveUpdateCheckConfig(),
   mail: resolveMailConfig(),
+  netlightApi: resolveNetlightApiConfig(),
 };
 if (config.nodeEnv === "production") {
   validateProductionConfig(config);

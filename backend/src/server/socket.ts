@@ -198,7 +198,7 @@ export const registerSocketHandlers = ({
           user,
         }: {
           drawingId: string;
-          user: Omit<PresenceUser, "socketId" | "isActive">;
+          user: Omit<PresenceUser, "socketId" | "isActive" | "avatarUrl">;
         },
         ack?: (payload: {
           user: Omit<PresenceUser, "socketId" | "isActive">;
@@ -223,6 +223,8 @@ export const registerSocketHandlers = ({
               ? user.id.trim().slice(0, 200)
               : socket.id;
           let trustedName = toPresenceName(user?.name);
+          // Only ever taken from the database; a client-sent avatarUrl is ignored.
+          let trustedAvatarUrl: string | null = null;
 
           if (!principal) {
             // Never trust client-provided ids for anonymous/share-link sessions; prevent spoofing/collisions.
@@ -233,11 +235,12 @@ export const registerSocketHandlers = ({
           ) {
             const account = await prisma.user.findUnique({
               where: { id: principal.userId },
-              select: { id: true, name: true },
+              select: { id: true, name: true, avatarUrl: true },
             });
             if (account) {
               trustedUserId = account.id;
               trustedName = toPresenceName(account.name);
+              trustedAvatarUrl = account.avatarUrl ?? null;
             } else {
               // Lookup failed mid-session: fall back to a server-derived id
               // rather than echoing the client-supplied one.
@@ -253,6 +256,7 @@ export const registerSocketHandlers = ({
             name: trustedName,
             initials: toPresenceInitials(trustedName),
             color: toPresenceColor(user?.color),
+            avatarUrl: trustedAvatarUrl,
             socketId: socket.id,
             isActive: true,
           };
@@ -277,6 +281,7 @@ export const registerSocketHandlers = ({
                 name: newUser.name,
                 initials: newUser.initials,
                 color: newUser.color,
+                avatarUrl: newUser.avatarUrl,
               },
             });
           }
@@ -312,6 +317,7 @@ export const registerSocketHandlers = ({
         userId: self.id,
         username: self.name,
         color: self.color,
+        avatarUrl: self.avatarUrl,
       });
     });
 

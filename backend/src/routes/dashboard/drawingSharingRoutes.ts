@@ -62,7 +62,7 @@ export const registerDrawingSharingRoutes = (
             { username: { contains: q } },
           ],
         },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, avatarUrl: true },
         take: 10,
       });
 
@@ -94,7 +94,9 @@ export const registerDrawingSharingRoutes = (
             permission: true,
             createdAt: true,
             updatedAt: true,
-            granteeUser: { select: { id: true, name: true, email: true } },
+            granteeUser: {
+              select: { id: true, name: true, email: true, avatarUrl: true },
+            },
           },
           orderBy: { createdAt: "desc" },
         }),
@@ -175,7 +177,9 @@ export const registerDrawingSharingRoutes = (
           permission: true,
           createdAt: true,
           updatedAt: true,
-          granteeUser: { select: { id: true, name: true, email: true } },
+          granteeUser: {
+            select: { id: true, name: true, email: true, avatarUrl: true },
+          },
         },
       });
 

@@ -64,6 +64,7 @@ export type RegisterOidcRoutesDeps = {
       jitProvisioning: boolean;
       firstUserAdmin: boolean;
     };
+    netlightApi: { url: string | null };
   };
 };
 

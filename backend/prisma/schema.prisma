@@ -19,6 +19,7 @@ model User {
   mustResetPassword   Boolean             @default(false)
   isActive            Boolean             @default(true)
   preferences         String?
+  avatarUrl           String?
   authIdentities      AuthIdentity[]
   drawings            Drawing[]
   collections         Collection[]

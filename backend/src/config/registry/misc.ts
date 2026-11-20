@@ -41,3 +41,13 @@ export const linkSharingEnv: readonly EnvVarSpec[] = [
     doc: "Maximum allowed lifetime (ms) for any share link (90 days).",
   },
 ];
+
+export const netlightApiEnv: readonly EnvVarSpec[] = [
+  {
+    name: "NETLIGHT_API_URL",
+    group: "Netlight API",
+    kind: "string",
+    doc: "Base URL of the Netlight API used to look up user profile pictures at OIDC login (requires OIDC_SCOPES to include the Netlight API scope); unset disables profile pictures.",
+    example: "https://api.prd.aws.netlight.com",
+  },
+];

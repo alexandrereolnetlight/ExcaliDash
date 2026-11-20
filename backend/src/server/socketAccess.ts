@@ -10,6 +10,8 @@ export interface PresenceUser {
   name: string;
   initials: string;
   color: string;
+  /** Server-derived profile picture URL; null for anonymous users. Never client-provided. */
+  avatarUrl: string | null;
   socketId: string;
   isActive: boolean;
 }

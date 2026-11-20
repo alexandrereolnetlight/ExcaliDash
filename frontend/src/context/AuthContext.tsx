@@ -30,6 +30,7 @@ export interface User {
   name: string;
   role?: "ADMIN" | "USER" | string;
   mustResetPassword?: boolean;
+  avatarUrl?: string | null;
 }
 
 interface AuthContextType {

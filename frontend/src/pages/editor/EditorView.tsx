@@ -94,6 +94,7 @@ const CollaboratorAvatar = ({
   const avatar = (
     <ProfileAvatar
       name={user.name}
+      avatarUrl={user.avatarUrl}
       size="toolbar"
       className={clsx(
         "transition-all duration-300",

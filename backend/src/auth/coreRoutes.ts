@@ -841,6 +841,7 @@ export const registerCoreRoutes = (deps: RegisterCoreRoutesDeps) => {
           name: true,
           role: true,
           mustResetPassword: true,
+          avatarUrl: true,
           createdAt: true,
           updatedAt: true,
         },

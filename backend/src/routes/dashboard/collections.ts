@@ -73,7 +73,9 @@ export const registerCollectionRoutes = (
         include: {
           collection: {
             include: {
-              user: { select: { id: true, name: true, email: true } },
+              user: {
+                select: { id: true, name: true, email: true, avatarUrl: true },
+              },
             },
           },
         },
@@ -217,7 +219,9 @@ export const registerCollectionRoutes = (
       const shares = await prisma.collectionShare.findMany({
         where: { collectionId: id },
         include: {
-          granteeUser: { select: { id: true, name: true, email: true } },
+          granteeUser: {
+            select: { id: true, name: true, email: true, avatarUrl: true },
+          },
         },
         orderBy: { createdAt: "asc" },
       });
@@ -260,7 +264,7 @@ export const registerCollectionRoutes = (
             { name: identifier },
           ],
         },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, avatarUrl: true },
       });
       if (!grantee) return res.status(404).json({ error: "User not found" });
       if (grantee.id === req.user.id)
@@ -281,7 +285,9 @@ export const registerCollectionRoutes = (
           createdByUserId: req.user.id,
         },
         include: {
-          granteeUser: { select: { id: true, name: true, email: true } },
+          granteeUser: {
+            select: { id: true, name: true, email: true, avatarUrl: true },
+          },
         },
       });
       invalidateDrawingsCache();
@@ -377,7 +383,7 @@ export const registerCollectionRoutes = (
             { username: { contains: q } },
           ],
         },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, avatarUrl: true },
         take: 8,
       });
 

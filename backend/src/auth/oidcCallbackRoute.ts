@@ -3,6 +3,7 @@ import { Prisma } from "../generated/client";
 import { logAuditEvent } from "../utils/audit";
 import type { RegisterOidcRoutesDeps } from "./oidcRoutes";
 import { hashTokenForStorage } from "./tokenSecurity";
+import { resolveNetlightAvatarUrl } from "./netlightAvatar";
 import {
   canUseIdTokenSigningAlg,
   decodeFlowPayload,
@@ -24,6 +25,7 @@ type OidcUser = {
   role: string;
   mustResetPassword: boolean;
   isActive: boolean;
+  avatarUrl: string | null;
 };
 
 type RegisterOidcCallbackRouteDeps = RegisterOidcRoutesDeps & {
@@ -67,6 +69,7 @@ export const registerOidcCallbackRoute = (
     role: true,
     mustResetPassword: true,
     isActive: true,
+    avatarUrl: true,
   } as const;
   const ensureTrashCollection = async (
     tx: Prisma.TransactionClient,
@@ -330,6 +333,31 @@ export const registerOidcCallbackRoute = (
           "account_inactive",
           flow.returnTo,
         );
+      }
+      if (config.netlightApi.url) {
+        // Best effort: a Netlight API problem must never block the login.
+        try {
+          const avatarUrl = await resolveNetlightAvatarUrl({
+            accessToken:
+              typeof tokenSet.access_token === "string"
+                ? tokenSet.access_token
+                : null,
+            azureUserId: readStringClaim(claims, "oid"),
+            email: normalizedEmail,
+          });
+          if (avatarUrl !== undefined && avatarUrl !== user.avatarUrl) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { avatarUrl },
+              select: { id: true },
+            });
+          }
+        } catch (avatarError) {
+          console.warn(
+            "OIDC: failed to update the Netlight profile picture:",
+            avatarError instanceof Error ? avatarError.message : avatarError,
+          );
+        }
       }
       const { accessToken, refreshToken } = generateTokens(
         user.id,

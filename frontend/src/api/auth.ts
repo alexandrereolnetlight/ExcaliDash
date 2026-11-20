@@ -53,6 +53,7 @@ export interface AuthUser {
   name: string;
   role?: string;
   mustResetPassword?: boolean;
+  avatarUrl?: string | null;
 }
 
 export type ThemePreference = "light" | "dark" | "system";

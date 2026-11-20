@@ -207,7 +207,11 @@ export const Profile: React.FC = () => {
                 {authUser && (
                   <div className="relative overflow-hidden bg-indigo-50/70 px-5 py-5 dark:bg-indigo-950/20 sm:px-6">
                     <div className="relative flex flex-wrap items-center gap-5">
-                      <UserAvatar name={authUser.name} size="lg" />
+                      <UserAvatar
+                        name={authUser.name}
+                        avatarUrl={authUser.avatarUrl}
+                        size="lg"
+                      />
                       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                         <input
                           id="name"

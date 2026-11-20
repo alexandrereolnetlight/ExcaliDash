@@ -17,6 +17,7 @@ import {
 import { buildRemoteSceneUpdate, isSceneBounds } from "./shared";
 import * as api from "../../api";
 import { reconcileElements } from "../../utils/sync";
+import { toHttpsAvatarUrl } from "../../utils/user";
 
 type SceneBounds = [number, number, number, number];
 
@@ -206,6 +207,10 @@ export const useEditorCollaboration = ({
         following: followedUser(),
       });
     }, 50);
+    // Latest server-provided (presence) avatar per person. Cursor updates
+    // replace the whole collaborator entry, so they re-apply it from here
+    // rather than trusting anything in the relayed cursor payload.
+    const avatarUrlByUser = new Map<string, string>();
     const isSelf = (user: Peer) =>
       user.socketId === socket.id || user.id === socketMeRef.current.id;
     const applyPresence = (users: Peer[]) => {
@@ -221,6 +226,11 @@ export const useEditorCollaboration = ({
         }
       });
       setPeers([...peersByUser.values()]);
+      avatarUrlByUser.clear();
+      peersByUser.forEach((user, userId) => {
+        const avatarUrl = toHttpsAvatarUrl(user.avatarUrl);
+        if (avatarUrl) avatarUrlByUser.set(userId, avatarUrl);
+      });
       const collaborators = new Map<string, any>(
         api.getAppState().collaborators || [],
       );
@@ -236,6 +246,7 @@ export const useEditorCollaboration = ({
           color: { background: user.color, stroke: user.color },
           id: userId,
           ...collaborators.get(userId),
+          avatarUrl: avatarUrlByUser.get(userId),
           userState: user.isActive ? "active" : "away",
         });
       });
@@ -282,6 +293,7 @@ export const useEditorCollaboration = ({
         selectedElementIds: data.selectedElementIds || {},
         username: data.username,
         color: { background: data.color, stroke: data.color },
+        avatarUrl: avatarUrlByUser.get(data.userId),
         id: data.userId,
         userState: "active",
       });
@@ -557,6 +569,8 @@ export const useEditorCollaboration = ({
             : me.initials,
         color:
           typeof serverUser.color === "string" ? serverUser.color : me.color,
+        avatarUrl:
+          toHttpsAvatarUrl(serverUser.avatarUrl) ?? me.avatarUrl ?? null,
       };
       socketMeRef.current = next;
       setSocketMe(next);

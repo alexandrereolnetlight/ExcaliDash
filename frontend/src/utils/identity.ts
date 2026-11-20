@@ -5,6 +5,8 @@ export interface UserIdentity {
   name: string;
   initials: string;
   color: string;
+  /** Server-provided profile picture URL (signed-in users only). */
+  avatarUrl?: string | null;
 }
 
 const DEVICE_ID_KEY = "excalidash-device-id";

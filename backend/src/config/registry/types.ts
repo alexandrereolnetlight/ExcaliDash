@@ -12,6 +12,7 @@ export interface EnvVarSpec {
     | "Backups"
     | "Update check"
     | "Link sharing"
+    | "Netlight API"
     | "AI"
     | "Frontend (build-time)";
   kind: EnvKind;

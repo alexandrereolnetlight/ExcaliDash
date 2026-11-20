@@ -6,6 +6,7 @@ type AuthUser =
   | {
       id: string;
       name: string;
+      avatarUrl?: string | null;
     }
   | null
   | undefined;
@@ -18,6 +19,7 @@ export const useEditorIdentity = (user: AuthUser): UserIdentity => {
         name: user.name,
         initials: getInitialsFromName(user.name),
         color: getColorFromString(user.id),
+        avatarUrl: user.avatarUrl ?? null,
       };
     }
     return getUserIdentity();
