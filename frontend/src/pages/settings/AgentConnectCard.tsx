@@ -117,8 +117,13 @@ export const AgentConnectCard: React.FC<Props> = ({
   const [token, setToken] = useState("");
   const [tokenReadOnly, setTokenReadOnly] = useState(false);
 
-  const commands = buildAgentCommands(window.location.origin);
-  const keyCommands = buildApiKeyAgentCommands(window.location.origin, token);
+  // Tolerate environments without window.location (e.g. stubbed test windows).
+  const origin =
+    typeof window !== "undefined" && window.location
+      ? window.location.origin
+      : "";
+  const commands = buildAgentCommands(origin);
+  const keyCommands = buildApiKeyAgentCommands(origin, token);
   const keyCommand =
     keyTab === "claude" ? keyCommands.claudeCode : keyCommands.codex;
 

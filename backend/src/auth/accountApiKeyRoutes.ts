@@ -58,6 +58,7 @@ export const registerAccountApiKeyRoutes = (
     config,
     requireCsrf,
     sanitizeText,
+    disconnectRevokedApiKey,
   } = deps;
   router.get("/api-keys", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -212,6 +213,7 @@ export const registerAccountApiKeyRoutes = (
           });
         }
 
+        disconnectRevokedApiKey?.(apiKey.id);
         if (config.enableAuditLogging) {
           await logAuditEvent({
             userId: req.user.id,
