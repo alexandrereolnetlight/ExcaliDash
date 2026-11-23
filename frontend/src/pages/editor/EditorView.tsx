@@ -1,7 +1,7 @@
-import React from "react";
+import React, { useCallback, useState } from "react";
 import type { DrawingSnapshotFull } from "../../api";
 import { HistoryPreviewCanvas } from "./HistoryPreviewCanvas";
-import { Excalidraw, MainMenu } from "@excalidraw/excalidraw";
+import { Excalidraw, MainMenu, Sidebar } from "@excalidraw/excalidraw";
 import {
   ArrowLeft,
   ChevronDown,
@@ -11,6 +11,7 @@ import {
   History,
   Loader2,
   Share2,
+  Sparkles,
 } from "lucide-react";
 import clsx from "clsx";
 import { Toaster } from "sonner";
@@ -22,6 +23,13 @@ import { UserAvatar as ProfileAvatar } from "../../components/UserAvatar";
 import type { UserIdentity } from "../../utils/identity";
 import { UIOptions, validateEmbeddableUrl } from "./shared";
 import type { Peer } from "./useEditorCollaboration";
+import type { EnabledAiStatus } from "../../api/ai";
+import { AssistantPanel } from "../../components/assistant/AssistantPanel";
+import {
+  ASSISTANT_SIDEBAR_NAME,
+  buildAssistantContext,
+} from "../../components/assistant/assistantContext";
+import { useAssistantChat } from "../../components/assistant/useAssistantChat";
 
 type EditorViewProps = {
   id?: string;
@@ -74,6 +82,10 @@ type EditorViewProps = {
   onHistoryOpen: () => void;
   onToggleAutoHide: () => void;
   onToggleTheme: () => void;
+  /** Assistant status when the assistant is available here, else null. */
+  assistantStatus: EnabledAiStatus | null;
+  isAdmin: boolean;
+  getExcalidrawAPI: () => any;
 };
 
 const CollaboratorAvatar = ({
@@ -176,224 +188,303 @@ export const EditorView: React.FC<EditorViewProps> = ({
   onHistoryOpen,
   onToggleAutoHide,
   onToggleTheme,
-}) => (
-  <div
-    className="h-screen flex flex-col bg-white dark:bg-neutral-950 overflow-hidden"
-    onKeyDownCapture={(event) => {
-      if (event.altKey && event.shiftKey && event.code === "KeyD") {
-        event.preventDefault();
-        event.stopPropagation();
-        onToggleTheme();
-      }
-    }}
-  >
-    <header
-      className={clsx(
-        "h-16 bg-white dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-800 flex items-center px-4 justify-between z-10 fixed top-0 left-0 right-0 transition-all duration-300",
-        isHeaderVisible || isShareOpen ? "translate-y-0" : "-translate-y-full",
-      )}
-    >
-      <div className="flex items-center gap-4">
-        <button
-          onClick={onBackClick}
-          onPointerEnter={onBackIntent}
-          onFocus={onBackIntent}
-          disabled={isSavingOnLeave}
-          className={`flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full text-gray-600 dark:text-gray-300 disabled:opacity-50 disabled:cursor-wait transition-all duration-200 ${isSavingOnLeave ? "pr-4" : ""}`}
-        >
-          {isSavingOnLeave ? (
-            <>
-              <Loader2 size={20} className="animate-spin" />
-              <span className="text-sm font-medium">Saving changes...</span>
-            </>
-          ) : (
-            <ArrowLeft size={20} />
-          )}
-        </button>
-        {isRenaming ? (
-          <InlineEditInput
-            aria-label="Drawing name"
-            value={newName}
-            onChange={(e) => onNewNameChange(e.target.value)}
-            onCommit={onRenameSubmit}
-            onCancel={onRenameCancel}
-            className="font-medium text-gray-900 dark:text-white bg-transparent px-2 py-1 border-2 border-indigo-500 rounded-md outline-none min-w-[200px]"
-            style={{ width: `${Math.max(200, newName.length * 9 + 20)}px` }}
-          />
-        ) : (
-          <h1
-            className="font-medium text-gray-900 dark:text-white px-2 py-1 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded cursor-text"
-            onDoubleClick={onRenameStart}
-          >
-            {drawingName}
-          </h1>
-        )}
-      </div>
-      <div className="flex items-center gap-3">
-        {canEdit && autosaveFailing ? (
-          <span
-            className="flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200 border border-red-200 dark:border-red-800"
-            title="Your recent changes could not be saved. Check your connection and try again."
-            role="status"
-          >
-            <CloudOff size={14} />
-            Unsaved changes
-          </span>
-        ) : null}
-        {!canEdit ? (
-          <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
-            Read-only
-          </span>
-        ) : null}
-        {canEdit && id ? (
-          <button
-            ref={historyButtonRef}
-            onClick={onHistoryOpen}
-            className="ui-toolbar-button"
-            title="Version History"
-          >
-            <History size={20} />
-          </button>
-        ) : null}
-        {accessLevel === "owner" && id ? (
-          <div className="relative inline-flex">
-            <button
-              ref={shareButtonRef}
-              onClick={onShareOpen}
-              className="ui-toolbar-button"
-              title="Share"
-            >
-              <Share2 size={20} />
-            </button>
-          </div>
-        ) : null}
-        <button
-          onClick={onToggleAutoHide}
-          className="ui-toolbar-button"
-          title={autoHideEnabled ? "Disable auto-hide" : "Enable auto-hide"}
-        >
-          {autoHideEnabled ? (
-            <ChevronUp size={20} />
-          ) : (
-            <ChevronDown size={20} />
-          )}
-        </button>
-        <div className="h-6 w-px bg-gray-300 dark:bg-gray-700" />
-        <button
-          onClick={onExportClick}
-          className="ui-toolbar-button"
-          title="Export drawing"
-        >
-          <Download size={20} />
-        </button>
-        <div className="h-6 w-px bg-gray-300 dark:bg-gray-700" />
-        <div className="flex items-center">
-          <CollaboratorAvatar user={me} label={`${me.name} (You)`} />
-          {peers.length > 0 ? (
-            <>
-              <div className="h-6 w-px bg-gray-300 dark:bg-gray-700 mx-2" />
-              <div className="flex items-center gap-2">
-                {peers.map((peer) => (
-                  <CollaboratorAvatar
-                    key={peer.id}
-                    user={peer}
-                    label={peer.name}
-                    inactive={!peer.isActive}
-                    followed={peer.id === followedUserId}
-                    onClick={() => onToggleFollow(peer)}
-                  />
-                ))}
-              </div>
-            </>
-          ) : null}
-        </div>
-      </div>
-    </header>
-    {accessLevel === "owner" && id ? (
-      <ShareModal
-        drawingId={id}
-        drawingName={drawingName}
-        isOpen={isShareOpen}
-        onClose={onCloseShare}
-        anchorRef={shareButtonRef}
-      />
-    ) : null}
+  assistantStatus,
+  isAdmin,
+  getExcalidrawAPI,
+}) => {
+  // Name of the open Excalidraw sidebar (ours or the library), from onChange.
+  const [openSidebarName, setOpenSidebarName] = useState<string | null>(null);
+  const showAssistant = Boolean(
+    assistantStatus && id && canEdit && !isHistoryOpen,
+  );
+  const getAssistantContext = useCallback(
+    () => buildAssistantContext(getExcalidrawAPI()?.getAppState?.()),
+    [getExcalidrawAPI],
+  );
+  // Owned here, not by the sidebar: Excalidraw unmounts a closed sidebar.
+  const assistantChat = useAssistantChat({
+    drawingId: id ?? "",
+    canChat: Boolean(assistantStatus?.credentialAvailable),
+    getContext: getAssistantContext,
+  });
+  const handleChange = (
+    elements: readonly any[],
+    appState: any,
+    files?: Record<string, any>,
+  ) => {
+    setOpenSidebarName(appState?.openSidebar?.name ?? null);
+    onCanvasChange(elements, appState, files);
+  };
+  const openAssistant = () =>
+    getExcalidrawAPI()?.toggleSidebar?.({
+      name: ASSISTANT_SIDEBAR_NAME,
+      force: true,
+    });
+
+  return (
     <div
-      ref={editorContainerRef}
-      className="relative w-full flex-1"
-      onDropCapture={(event) => {
-        if (isHistoryOpen) {
+      className="h-screen flex flex-col bg-white dark:bg-neutral-950 overflow-hidden"
+      onKeyDownCapture={(event) => {
+        if (event.altKey && event.shiftKey && event.code === "KeyD") {
           event.preventDefault();
           event.stopPropagation();
-          return;
+          onToggleTheme();
         }
-        onCanvasDropCapture(event);
-      }}
-      style={{
-        height: isHeaderVisible ? "calc(100vh - 4rem)" : "100vh",
-        marginTop: isHeaderVisible ? "4rem" : "0",
       }}
     >
-      {loadError ? (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white dark:bg-neutral-950 px-6">
-          <div className="text-center">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
-              Unable to open drawing
-            </h2>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-              {loadError}
-            </p>
-          </div>
-          <button onClick={onNavigateHome} className="ui-button-secondary px-4">
-            Back to dashboard
+      <header
+        className={clsx(
+          "h-16 bg-white dark:bg-neutral-900 border-b border-gray-200 dark:border-neutral-800 flex items-center px-4 justify-between z-10 fixed top-0 left-0 right-0 transition-all duration-300",
+          isHeaderVisible || isShareOpen
+            ? "translate-y-0"
+            : "-translate-y-full",
+        )}
+      >
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onBackClick}
+            onPointerEnter={onBackIntent}
+            onFocus={onBackIntent}
+            disabled={isSavingOnLeave}
+            className={`flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded-full text-gray-600 dark:text-gray-300 disabled:opacity-50 disabled:cursor-wait transition-all duration-200 ${isSavingOnLeave ? "pr-4" : ""}`}
+          >
+            {isSavingOnLeave ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                <span className="text-sm font-medium">Saving changes...</span>
+              </>
+            ) : (
+              <ArrowLeft size={20} />
+            )}
           </button>
+          {isRenaming ? (
+            <InlineEditInput
+              aria-label="Drawing name"
+              value={newName}
+              onChange={(e) => onNewNameChange(e.target.value)}
+              onCommit={onRenameSubmit}
+              onCancel={onRenameCancel}
+              className="font-medium text-gray-900 dark:text-white bg-transparent px-2 py-1 border-2 border-indigo-500 rounded-md outline-none min-w-[200px]"
+              style={{ width: `${Math.max(200, newName.length * 9 + 20)}px` }}
+            />
+          ) : (
+            <h1
+              className="font-medium text-gray-900 dark:text-white px-2 py-1 hover:bg-gray-100 dark:hover:bg-neutral-800 rounded cursor-text"
+              onDoubleClick={onRenameStart}
+            >
+              {drawingName}
+            </h1>
+          )}
         </div>
-      ) : initialData ? (
-        <Excalidraw
-          key={id}
-          theme={theme === "dark" ? "dark" : "light"}
-          langCode={langCode}
-          initialData={initialData}
-          onChange={onCanvasChange}
-          onPointerUpdate={onPointerUpdate}
-          onLibraryChange={onLibraryChange}
-          excalidrawAPI={onSetExcalidrawAPI}
-          UIOptions={UIOptions}
-          validateEmbeddable={validateEmbeddableUrl}
-          viewModeEnabled={!canEdit || isHistoryOpen}
-        >
-          <MainMenu>
-            <MainMenu.Item onSelect={onToggleTheme} shortcut="Shift+Alt+D">
-              {theme === "dark" ? "Light mode" : "Dark mode"}
-            </MainMenu.Item>
-            <MainMenu.DefaultItems.SaveAsImage />
-            <MainMenu.DefaultItems.ClearCanvas />
-            <MainMenu.DefaultItems.ChangeCanvasBackground />
-            <MainMenu.DefaultItems.Help />
-            <MainMenu.Separator />
-            <MainMenu.ItemCustom>
-              <GridStepSelector gridStep={gridStep} onChange={onSetGridStep} />
-            </MainMenu.ItemCustom>
-            <MainMenu.ItemCustom>
-              <LanguageSelector langCode={langCode} onChange={onSetLangCode} />
-            </MainMenu.ItemCustom>
-          </MainMenu>
-        </Excalidraw>
-      ) : (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
-          <span className="text-sm font-medium">
-            {isSceneLoading ? "Loading drawing..." : "Preparing canvas..."}
-          </span>
+        <div className="flex items-center gap-3">
+          {canEdit && autosaveFailing ? (
+            <span
+              className="flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200 border border-red-200 dark:border-red-800"
+              title="Your recent changes could not be saved. Check your connection and try again."
+              role="status"
+            >
+              <CloudOff size={14} />
+              Unsaved changes
+            </span>
+          ) : null}
+          {!canEdit ? (
+            <span className="text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200 border border-amber-200 dark:border-amber-800">
+              Read-only
+            </span>
+          ) : null}
+          {canEdit && id ? (
+            <button
+              ref={historyButtonRef}
+              onClick={onHistoryOpen}
+              className="ui-toolbar-button"
+              title="Version History"
+            >
+              <History size={20} />
+            </button>
+          ) : null}
+          {accessLevel === "owner" && id ? (
+            <div className="relative inline-flex">
+              <button
+                ref={shareButtonRef}
+                onClick={onShareOpen}
+                className="ui-toolbar-button"
+                title="Share"
+              >
+                <Share2 size={20} />
+              </button>
+            </div>
+          ) : null}
+          <button
+            onClick={onToggleAutoHide}
+            className="ui-toolbar-button"
+            title={autoHideEnabled ? "Disable auto-hide" : "Enable auto-hide"}
+          >
+            {autoHideEnabled ? (
+              <ChevronUp size={20} />
+            ) : (
+              <ChevronDown size={20} />
+            )}
+          </button>
+          <div className="h-6 w-px bg-gray-300 dark:bg-gray-700" />
+          <button
+            onClick={onExportClick}
+            className="ui-toolbar-button"
+            title="Export drawing"
+          >
+            <Download size={20} />
+          </button>
+          <div className="h-6 w-px bg-gray-300 dark:bg-gray-700" />
+          <div className="flex items-center">
+            <CollaboratorAvatar user={me} label={`${me.name} (You)`} />
+            {peers.length > 0 ? (
+              <>
+                <div className="h-6 w-px bg-gray-300 dark:bg-gray-700 mx-2" />
+                <div className="flex items-center gap-2">
+                  {peers.map((peer) => (
+                    <CollaboratorAvatar
+                      key={peer.id}
+                      user={peer}
+                      label={peer.name}
+                      inactive={!peer.isActive}
+                      followed={peer.id === followedUserId}
+                      onClick={() => onToggleFollow(peer)}
+                    />
+                  ))}
+                </div>
+              </>
+            ) : null}
+          </div>
         </div>
-      )}
-      {historyPreview ? (
-        <HistoryPreviewCanvas
-          snapshot={historyPreview}
-          theme={theme}
-          langCode={langCode}
+      </header>
+      {accessLevel === "owner" && id ? (
+        <ShareModal
+          drawingId={id}
+          drawingName={drawingName}
+          isOpen={isShareOpen}
+          onClose={onCloseShare}
+          anchorRef={shareButtonRef}
         />
       ) : null}
-      <Toaster position="bottom-center" />
+      <div
+        ref={editorContainerRef}
+        className="relative w-full flex-1"
+        onDropCapture={(event) => {
+          if (isHistoryOpen) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          onCanvasDropCapture(event);
+        }}
+        style={{
+          height: isHeaderVisible ? "calc(100vh - 4rem)" : "100vh",
+          marginTop: isHeaderVisible ? "4rem" : "0",
+        }}
+      >
+        {loadError ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-white dark:bg-neutral-950 px-6">
+            <div className="text-center">
+              <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                Unable to open drawing
+              </h2>
+              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                {loadError}
+              </p>
+            </div>
+            <button
+              onClick={onNavigateHome}
+              className="ui-button-secondary px-4"
+            >
+              Back to dashboard
+            </button>
+          </div>
+        ) : initialData ? (
+          <Excalidraw
+            key={id}
+            theme={theme === "dark" ? "dark" : "light"}
+            langCode={langCode}
+            initialData={initialData}
+            onChange={handleChange}
+            onPointerUpdate={onPointerUpdate}
+            onLibraryChange={onLibraryChange}
+            excalidrawAPI={onSetExcalidrawAPI}
+            UIOptions={UIOptions}
+            validateEmbeddable={validateEmbeddableUrl}
+            viewModeEnabled={!canEdit || isHistoryOpen}
+          >
+            <MainMenu>
+              <MainMenu.Item onSelect={onToggleTheme} shortcut="Shift+Alt+D">
+                {theme === "dark" ? "Light mode" : "Dark mode"}
+              </MainMenu.Item>
+              <MainMenu.DefaultItems.SaveAsImage />
+              <MainMenu.DefaultItems.ClearCanvas />
+              <MainMenu.DefaultItems.ChangeCanvasBackground />
+              <MainMenu.DefaultItems.Help />
+              <MainMenu.Separator />
+              <MainMenu.ItemCustom>
+                <GridStepSelector
+                  gridStep={gridStep}
+                  onChange={onSetGridStep}
+                />
+              </MainMenu.ItemCustom>
+              <MainMenu.ItemCustom>
+                <LanguageSelector
+                  langCode={langCode}
+                  onChange={onSetLangCode}
+                />
+              </MainMenu.ItemCustom>
+            </MainMenu>
+            {showAssistant && assistantStatus && id ? (
+              <Sidebar
+                name={ASSISTANT_SIDEBAR_NAME}
+                className="excalight-assistant"
+              >
+                <Sidebar.Header>
+                  <span className="flex items-center gap-2 font-semibold">
+                    <Sparkles size={16} />
+                    Assistant
+                  </span>
+                </Sidebar.Header>
+                <AssistantPanel
+                  chat={assistantChat}
+                  status={assistantStatus}
+                  isAdmin={isAdmin}
+                />
+              </Sidebar>
+            ) : null}
+          </Excalidraw>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-gray-500 dark:text-gray-400">
+            <span className="text-sm font-medium">
+              {isSceneLoading ? "Loading drawing..." : "Preparing canvas..."}
+            </span>
+          </div>
+        )}
+        {showAssistant && initialData && !loadError && !openSidebarName ? (
+          <button
+            type="button"
+            onClick={openAssistant}
+            className={clsx(
+              "absolute bottom-20 right-4 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg transition-colors hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2",
+              assistantChat.isStreaming && "animate-pulse",
+            )}
+            aria-label="Open the assistant"
+            title={
+              assistantChat.isStreaming ? "Assistant (working…)" : "Assistant"
+            }
+          >
+            <Sparkles size={20} />
+          </button>
+        ) : null}
+        {historyPreview ? (
+          <HistoryPreviewCanvas
+            snapshot={historyPreview}
+            theme={theme}
+            langCode={langCode}
+          />
+        ) : null}
+        <Toaster position="bottom-center" />
+      </div>
     </div>
-  </div>
-);
+  );
+};

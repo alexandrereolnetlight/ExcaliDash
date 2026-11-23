@@ -78,6 +78,43 @@ export const parseApiKeyScopes = (raw: string | null | undefined): string[] =>
     .map((scope) => scope.trim())
     .filter((scope) => scope.length > 0);
 
+/**
+ * Mint a short-lived API key for server-side work done on a user's behalf
+ * (the AI assistant's loopback REST calls). It expires on its own (enforced
+ * by authenticateApiKey), never appears in the API key list, and callers
+ * delete it as soon as the work ends; expired leftovers are swept.
+ */
+export const createEphemeralApiKey = async (
+  prisma: PrismaClient,
+  {
+    userId,
+    name,
+    scopes,
+    ttlMs,
+  }: { userId: string; name: string; scopes: readonly string[]; ttlMs: number },
+): Promise<{ id: string; token: string }> => {
+  const generated = generateApiKey();
+  const created = await prisma.apiKey.create({
+    data: {
+      userId,
+      name,
+      keyId: generated.keyId,
+      tokenHash: generated.tokenHash,
+      prefix: generated.prefix,
+      scopes: serializeApiKeyScopes(scopes),
+      expiresAt: new Date(Date.now() + ttlMs),
+      ephemeral: true,
+    },
+    select: { id: true },
+  });
+  return { id: created.id, token: generated.token };
+};
+
+export const deleteExpiredEphemeralApiKeys = (prisma: PrismaClient) =>
+  prisma.apiKey.deleteMany({
+    where: { ephemeral: true, expiresAt: { lt: new Date() } },
+  });
+
 // An MCP call authenticates once on /mcp and again on every loopback REST
 // call, so the grant's "last used" time is only refreshed once a minute.
 const GRANT_LAST_USED_RESOLUTION_MS = 60 * 1000;

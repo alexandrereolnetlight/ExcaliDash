@@ -247,3 +247,10 @@ html.dark body {
 .dark .drawing-preview [data-preview-raster="true"] {
   filter: invert(100%) hue-rotate(180deg) saturate(1.25);
 }
+
+/* In-editor AI assistant sidebar: a little wider than Excalidraw's default
+   302px so chat messages stay readable. It is never docked, so the canvas
+   offset (which uses --right-sidebar-width) is unaffected. */
+.excalidraw .sidebar.excalight-assistant {
+  width: min(380px, calc(100vw - 1rem));
+}

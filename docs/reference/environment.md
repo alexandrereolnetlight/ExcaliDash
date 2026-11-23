@@ -99,3 +99,21 @@ See [Persist and back up data](/deploy/docker#persist-and-back-up-data) for a Co
 Once configured, **Forgot your password?** appears on the sign-in page:
 
 <ThemeScreenshot light="/images/screenshots/password-reset-light.png" dark="/images/screenshots/password-reset.png" alt="Password reset request form when email delivery is enabled" />
+
+## AI assistant
+
+The in-editor assistant (a chat sidebar that reads and edits the open drawing) talks to an LLM proxy that speaks the Anthropic Messages API, such as LiteLLM. Keys are sent as `Authorization: Bearer <key>` and validated with `GET {AI_PROXY_BASE_URL}/v1/models`.
+
+| Variable                | Default           | Purpose                                                                                                   |
+| ----------------------- | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `AI_ASSISTANT_ENABLED`  | `false`           | Shows the assistant to users with edit access and enables `/auth/ai/*` and `/agent/chat`                  |
+| `AI_PROXY_BASE_URL`     | unset             | Proxy base URL, e.g. `https://llm.netlight.ai`                                                            |
+| `AI_PROXY_API_KEY`      | unset             | Shared key used for users without a personal key; unset means every user needs their own key              |
+| `AI_MODEL`              | `claude-opus-5-5` | Model requested from the proxy                                                                            |
+| `AI_EFFORT`             | `medium`          | `output_config.effort`: `low`, `medium`, `high`, `xhigh` or `max`                                         |
+| `AI_KEY_ENCRYPTION_KEY` | unset             | 32 bytes (base64 or 64 hex chars) to encrypt personal keys with AES-256-GCM; unset disables personal keys |
+| `AI_SERVER_FALLBACKS`   | `false`           | Sends `fallbacks: "default"` with the `server-side-fallback-2026-07-01` beta                              |
+
+`AI_SERVER_FALLBACKS` lets the API retry a request on a fallback model when the requested model declines it for policy reasons. It is off by default because the request goes through a proxy, which may reject the unknown parameter or beta header; enable it once you have confirmed your proxy forwards both.
+
+Each assistant edit is saved through the regular drawing API, so it appears live for everyone viewing the drawing and can be undone from the History panel.

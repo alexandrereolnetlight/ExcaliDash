@@ -1,5 +1,6 @@
 import express, { Request, Response } from "express";
 import { PrismaClient } from "../generated/client";
+import { registerAiAccountRoutes } from "../ai/accountRoutes";
 import type { Mailer } from "../mail/mailer";
 import { registerAccountApiKeyRoutes } from "./accountApiKeyRoutes";
 import { registerAccountOAuthRoutes } from "./accountOAuthRoutes";
@@ -50,4 +51,5 @@ export const registerAccountRoutes = (deps: RegisterAccountRoutesDeps) => {
   registerAccountApiKeyRoutes(deps);
   registerAccountOAuthRoutes(deps);
   registerAccountPasswordChangeRoutes(deps);
+  registerAiAccountRoutes(deps);
 };

@@ -11,6 +11,7 @@ import { AdvancedSettings } from "./settings/AdvancedSettings";
 import { SettingsConfirmModals } from "./settings/SettingsConfirmModals";
 import { ApiKeysCard } from "./profile/ApiKeysCard";
 import { AgentConnectCard } from "./settings/AgentConnectCard";
+import { AiAssistantCard } from "./settings/AiAssistantCard";
 import { Toaster } from "sonner";
 import { displayFontFamily } from "../utils/displayFont";
 import {
@@ -408,6 +409,10 @@ export const Settings: React.FC = () => {
               disabled={mustResetPassword}
               onSuccess={setSettingsSuccess}
               onKeyCreated={() => setApiKeysRefreshToken((value) => value + 1)}
+            />
+            <AiAssistantCard
+              disabled={mustResetPassword}
+              onSuccess={setSettingsSuccess}
             />
           </div>
         )}

@@ -35,6 +35,7 @@ import {
 import { type MailConfig, resolveMailConfig } from "./config/mail";
 import { resolveOidcClientSecret } from "./config/oidcSecret";
 import { resolveDatabaseUrl } from "./config/databaseUrl";
+import { type AiConfig, resolveAiConfig } from "./config/ai";
 
 export { buildPasswordPolicyMessage, validatePasswordAgainstPolicy };
 
@@ -106,6 +107,7 @@ interface Config {
   updateCheck: UpdateCheckConfig;
   mail: MailConfig;
   netlightApi: NetlightApiConfig;
+  ai: AiConfig;
 }
 
 export type AuthMode = "local" | "hybrid" | "oidc_enforced" | "disabled";
@@ -398,6 +400,7 @@ export const config: Config = {
   updateCheck: resolveUpdateCheckConfig(),
   mail: resolveMailConfig(),
   netlightApi: resolveNetlightApiConfig(),
+  ai: resolveAiConfig(),
 };
 if (config.nodeEnv === "production") {
   validateProductionConfig(config);

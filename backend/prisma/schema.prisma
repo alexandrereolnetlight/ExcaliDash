@@ -32,6 +32,7 @@ model User {
   oauthGrants         OAuthGrant[]
   auditLogs           AuditLog[]
   chatGptConnection   ChatGptConnection?
+  aiCredential        UserAiCredential?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 }
@@ -72,6 +73,19 @@ model ChatGptConnection {
   needsReconnect        Boolean  @default(false)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+}
+
+/// Optional personal LLM proxy key for the in-editor AI assistant. The key is
+/// AES-256-GCM encrypted (AI_KEY_ENCRYPTION_KEY) and never sent to the browser;
+/// only the last four characters are kept in clear for display.
+model UserAiCredential {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  keyEncrypted String
+  keyHint      String
+  validatedAt  DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model ChatGptAuthState {
@@ -234,6 +248,9 @@ model ApiKey {
   expiresAt    DateTime?
   oauthGrantId String?
   oauthGrant   OAuthGrant? @relation(fields: [oauthGrantId], references: [id], onDelete: Cascade)
+  // Short-lived keys minted per AI assistant request: hidden from the API key
+  // list, deleted when the request ends and swept once expired.
+  ephemeral  Boolean   @default(false)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 

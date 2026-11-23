@@ -25,6 +25,7 @@ import { useEditorFileUploads } from "./editor/useEditorFileUploads";
 import { useEditorSceneApi } from "./editor/useEditorSceneApi";
 import { useEditorGridStep } from "./editor/useEditorGridStep";
 import { useKeyboardLayoutFix } from "./editor/useKeyboardLayoutFix";
+import { useAssistantStatus } from "./editor/useAssistantStatus";
 import { DEFAULT_GRID_STEP } from "../components/GridStepSelector";
 
 export const Editor: React.FC = () => {
@@ -80,6 +81,11 @@ const ExcalidrawEditor: React.FC = () => {
     isShareOpen,
   });
   const me: UserIdentity = useEditorIdentity(user);
+  // The assistant edits as the signed-in user, so it is never offered on
+  // shared-link (/shared/:id) or read-only views.
+  const assistantStatus = useAssistantStatus(
+    Boolean(user) && canEdit && location.pathname.startsWith("/editor/"),
+  );
   const [isReady, setIsReady] = useState(false);
   const { elementVersionMap, hasElementChanged, recordElementVersion } =
     useEditorElementTracking();
@@ -117,6 +123,7 @@ const ExcalidrawEditor: React.FC = () => {
   }, []);
   const editorContainerRef = useRef<HTMLDivElement>(null);
   const excalidrawAPI = useRef<any>(null);
+  const getExcalidrawAPI = useCallback(() => excalidrawAPI.current, []);
   const { resolveSafeSnapshot, normalizeImageElementStatus } =
     useEditorSnapshotGuards({
       lastPersistedElementsRef,
@@ -419,6 +426,9 @@ const ExcalidrawEditor: React.FC = () => {
         onHistoryOpen={() => setIsHistoryOpen(true)}
         onToggleAutoHide={handleToggleAutoHide}
         onToggleTheme={toggleTheme}
+        assistantStatus={assistantStatus}
+        isAdmin={user?.role === "ADMIN"}
+        getExcalidrawAPI={getExcalidrawAPI}
       />
       <EditorDialogs
         drawingId={id}

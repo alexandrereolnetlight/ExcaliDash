@@ -51,6 +51,7 @@ import { startScheduledBackups } from "./backups/scheduler";
 import { runStorageDoctor } from "./server/storageDoctor";
 import { registerMcpRoutes } from "./mcp/routes";
 import { registerOAuthRoutes } from "./oauth/routes";
+import { registerAgentRoutes } from "./ai/agentRoutes";
 import {
   isInternalApiRequest,
   recordListeningAddress,
@@ -381,6 +382,8 @@ app.use(
     disconnectRevokedApiKey: socketHandlers.disconnectRevokedApiKey,
   }),
 );
+// In-editor AI assistant (session + CSRF; streams Server-Sent Events).
+registerAgentRoutes(app, { prisma, requireAuth });
 const filesFieldSchema = z
   .union([z.record(z.string(), z.unknown()), z.null()])
   .optional()

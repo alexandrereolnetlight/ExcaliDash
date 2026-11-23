@@ -640,8 +640,12 @@ export const createOAuthStore = (prisma: PrismaClient) => {
       await prisma.oAuthRefreshToken.deleteMany({
         where: { expiresAt: { lt: now } },
       });
+      // Expired OAuth access tokens and AI assistant per-request keys.
       await prisma.apiKey.deleteMany({
-        where: { oauthGrantId: { not: null }, expiresAt: { lt: now } },
+        where: {
+          OR: [{ oauthGrantId: { not: null } }, { ephemeral: true }],
+          expiresAt: { lt: now },
+        },
       });
       await prisma.oAuthClient.deleteMany({
         where: {

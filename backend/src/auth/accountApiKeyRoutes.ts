@@ -70,8 +70,14 @@ export const registerAccountApiKeyRoutes = (
       }
 
       const apiKeys = await prisma.apiKey.findMany({
-        // OAuth access tokens are listed per grant ("Connected agents").
-        where: { userId: req.user.id, drawingId: null, oauthGrantId: null },
+        // OAuth access tokens are listed per grant ("Connected agents");
+        // the AI assistant's per-request keys are internal.
+        where: {
+          userId: req.user.id,
+          drawingId: null,
+          oauthGrantId: null,
+          ephemeral: false,
+        },
         orderBy: { createdAt: "desc" },
         select: {
           id: true,
@@ -198,7 +204,12 @@ export const registerAccountApiKeyRoutes = (
         }
 
         const apiKey = await prisma.apiKey.findFirst({
-          where: { id: req.params.id, userId: req.user.id, oauthGrantId: null },
+          where: {
+            id: req.params.id,
+            userId: req.user.id,
+            oauthGrantId: null,
+            ephemeral: false,
+          },
           select: { id: true, revokedAt: true },
         });
         if (!apiKey) {
